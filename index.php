@@ -1,9 +1,8 @@
 <?php
-$token = 'Token'; // <-- BOT TOKEN QO'Y
+$token = 'token';
 $apiUrl = "https://api.telegram.org/bot$token/";
-$requiredChannel = '@'; // <-- KANAL USERNAME QO'Y
+$requiredChannel = '@chanel';
 
-// MySQL ulanish
 $servername = "localhost";
 $username = "*";
 $password = "*";
@@ -14,7 +13,6 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Kiritilgan so‘rovni olish
 $input = file_get_contents('php://input');
 $update = json_decode($input, true);
 
@@ -24,7 +22,8 @@ $callbackQuery = $update['callback_query'] ?? null;
 
 if ($chatId && $message) {
     if (strpos($message, '/start') === 0) {
-        $referralCode = trim(substr($message, 6)); // /start abc123
+        $referralCode = trim(substr($message, 6));
+
         $stmt = $conn->prepare("SELECT referral_code FROM users WHERE telegram_id = ?");
         $stmt->bind_param("i", $chatId);
         $stmt->execute();
@@ -32,23 +31,15 @@ if ($chatId && $message) {
         $stmt->fetch();
         $stmt->close();
 
-        // Obuna tekshiruvi
-        if (!isUserSubscribed($chatId, $requiredChannel)) {
-            // foydalanuvchi bazada yo'q bo‘lsa — yaratamiz va referral code'ni vaqtincha saqlaymiz
-            if (!$existingReferralCode) {
-                $newCode = bin2hex(random_bytes(5));
-                $stmt = $conn->prepare("INSERT INTO users (telegram_id, referral_code, waiting_verification) VALUES (?, ?, ?)");
-                $stmt->bind_param("iss", $chatId, $newCode, $referralCode);
-                $stmt->execute();
-                $stmt->close();
-            } else {
-                // eski user bo‘lsa, shunchaki referralni saqlaymiz
-                $stmt = $conn->prepare("UPDATE users SET waiting_verification = ? WHERE telegram_id = ?");
-                $stmt->bind_param("si", $referralCode, $chatId);
-                $stmt->execute();
-                $stmt->close();
-            }
+        if (!$existingReferralCode) {
+            $newCode = bin2hex(random_bytes(5));
+            $stmt = $conn->prepare("INSERT INTO users (telegram_id, referral_code, waiting_verification) VALUES (?, ?, ?)");
+            $stmt->bind_param("iss", $chatId, $newCode, $referralCode);
+            $stmt->execute();
+            $stmt->close();
+        }
 
+        if (!isUserSubscribed($chatId, $requiredChannel)) {
             $response = "📢 Botdan foydalanishdan oldin kanalga obuna bo‘lishingiz kerak: $requiredChannel\n\n👇 Obuna bo‘lsangiz, quyidagi tugmani bosing.";
             $keyboard = [
                 'inline_keyboard' => [
@@ -59,21 +50,26 @@ if ($chatId && $message) {
             exit;
         }
 
-        // obunadan o‘tgan bo‘lsa
+        $stmt = $conn->prepare("SELECT referral_code FROM users WHERE telegram_id = ?");
+        $stmt->bind_param("i", $chatId);
+        $stmt->execute();
+        $stmt->bind_result($existingReferralCode);
+        $stmt->fetch();
+        $stmt->close();
+
         if ($existingReferralCode) {
-            // $response = "Siz allaqachon ro‘yxatdan o‘tgansiz.\nReferal havolangiz: https://t.me/texnoizum_bot?start=$existingReferralCode";
-             $response = "Tabriklayman, siz allaqachon bepul darslikga mufaqqiyatli ro'yxatdan o'tgansiz🥳
+            $response = "Tabriklayman, siz allaqachon bepul darslikga mufaqqiyatli ro'yxatdan o'tgansiz🥳
 
 <b>Ushbu bot orqali do'stlaringiz va yaqinlaringizni taklif qilgan holda bir qancha qimmatli sovg'alarni qo'lga kiritishingiz mumkin🥰 
 
-🎁Balki aynan siz - xorijga bepul sayohat yo'llanmasi, noutbuk va  zamonaviy telefonni qo'lga kiritishingiz mumkin.</b>
+🏱Balki aynan siz - xorijga bepul sayohat yo'llanmasi, noutbuk va  zamonaviy telefonni qo'lga kiritishingiz mumkin.</b>
 
 <b>Qatnashish sharti haqida to'liqroq bilish uchun -</b> \"Do'stlarni taklif qilish\" <b>tugmasi ustiga bosing⚡️</b>
 <b>Agar siz taklif qilgan do'stlaringiz sonini bilishni istasangiz</b> \"Mening hisobim\" , <b>umumiy reytingni bilish uchun</b> \"Reyting\" <b>tugmasi ustiga bosishingiz mumkin😉</b>";
         } else {
             $myCode = bin2hex(random_bytes(5));
-            $stmt = $conn->prepare("INSERT INTO users (telegram_id, referral_code, referred_by) VALUES (?, ?, ?)");
-            $stmt->bind_param("iss", $chatId, $myCode, $referralCode ?: null);
+            $stmt = $conn->prepare("UPDATE users SET referral_code = ?, referred_by = ?, waiting_verification = NULL WHERE telegram_id = ?");
+            $stmt->bind_param("ssi", $myCode, $referralCode, $chatId);
             $stmt->execute();
             $stmt->close();
 
@@ -93,12 +89,11 @@ if ($chatId && $message) {
                 sendMessage($referrerId, "🎉 Sizning referal orqali do‘stingiz obuna bo‘ldi. Sizga +1 ball berildi!");
             }
 
-            // $response = "Botga hush kelibsiz!\nReferal havolangiz: https://t.me/texnoizum_bot?start=$myCode";
-             $response = "Tabriklayman, siz allaqachon bepul darslikga mufaqqiyatli ro'yxatdan o'tgansiz🥳
+            $response = "Tabriklayman, siz allaqachon bepul darslikga mufaqqiyatli ro'yxatdan o'tgansiz🥳
 
 <b>Ushbu bot orqali do'stlaringiz va yaqinlaringizni taklif qilgan holda bir qancha qimmatli sovg'alarni qo'lga kiritishingiz mumkin🥰 
 
-🎁Balki aynan siz - xorijga bepul sayohat yo'llanmasi, noutbuk va  zamonaviy telefonni qo'lga kiritishingiz mumkin.</b>
+🏱Balki aynan siz - xorijga bepul sayohat yo'llanmasi, noutbuk va  zamonaviy telefonni qo'lga kiritishingiz mumkin.</b>
 
 <b>Qatnashish sharti haqida to'liqroq bilish uchun -</b> \"Do'stlarni taklif qilish\" <b>tugmasi ustiga bosing⚡️</b>
 <b>Agar siz taklif qilgan do'stlaringiz sonini bilishni istasangiz</b> \"Mening hisobim\" , <b>umumiy reytingni bilish uchun</b> \"Reyting\" <b>tugmasi ustiga bosishingiz mumkin😉</b>";
@@ -114,10 +109,8 @@ if ($chatId && $message) {
             ]
         ];
 
-        $photoUrl = "https://t.me/files_online/17"; // Rasm URL ni o'zgartirish mumkin
-
+        $photoUrl = "https://t.me/files_online/17";
         sendPhoto($chatId, $photoUrl, $response, 'HTML', $keyboard);
-        // sendMessage($chatId, $response, $keyboard, 'HTML');
     }
 } elseif ($callbackQuery) {
     $callbackData = $callbackQuery['data'];
@@ -325,4 +318,3 @@ function sendPhoto($chatId, $photoUrl, $caption, $parseMode = null, $keyboard = 
     }
     curl_close($ch);
 }
-
